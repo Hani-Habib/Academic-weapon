@@ -220,10 +220,11 @@ for idx, age in enumerate(ages_to_plot):
 plt.tight_layout()
 plt.show()
 
-print("The plot shows that as time passes, the histograms shrink in size.")
-print("This likely happens because the three groups each converge against individual income levels.")
-print("However, while the histograms shrink in size, the relative difference between incomes")
-print("i.e the level of inequality seems to increase")
+print("The plot shows that as time passes, the histograms shrink in size."
+      " This likely happens because the three groups each converge against"
+      " individual income levels. However, while the histograms shrink in size,"
+      " the relative difference between incomes, i.e. the level of inequality,"
+      " seems to increase.")
 
 print("")
 print("#### 2.3 ####")
@@ -301,9 +302,9 @@ plt.ylabel('Gini coefficient')
 plt.title('Gini coefficient over the life cycle')
 plt.show()
 
-print("The graph shows that inequality increases with age due to a differences in human capital ")
-print("accumulation. Thus, for some age groups the gini-coefficient is larger and for some smaller ")
-print("than for the entire population")
+print("The graph shows that inequality increases with age due to differences in human capital "
+      "accumulation. Thus, for some age groups the gini-coefficient is larger and for some "
+      "smaller than for the entire population.")
 
 print("")
 print("#### 2.4 ####")
@@ -508,22 +509,21 @@ plt.legend()
 plt.show()
 
 print("")
-print("In the case of no deprectiation of human capital while unemployed, the results")
-print("show that the gini-coefficient across the entire population increases, while it is")
-print("lower or equal to the base case across every age group. This is likely caused by")
-print("the increased difference between younger and older generations caused by the lack of")
-print("depreciation, thus meaning that older generations now simply accumulate more ")
-print("human capital on average.")
+print("In the case of no depreciation of human capital while unemployed, the results"
+      " show that the gini-coefficient across the entire population increases, while it is"
+      " lower than or equal to the base case within every age group. This is likely caused by"
+      " the increased difference between younger and older age groups, since the lack of"
+      " depreciation means older workers now simply accumulate more human capital on average.")
 print("")
 
 print("#### 2.5 ####")
 print("")
-print("To mimic that lesser educated people, more often than highly educated people, ")
-print("do physical work, we augment the model by adding a risk of injury while working. ")
-print("In this case, human capital will depreciate at a faster rate, however, the worker ")
-print("gets compensated fully, i.e. gets the same salary as if he/she had been still working.")
-print("Note that once the worker returns to the job market, they will once again be compensated ")
-print("relative to their level of human capital.")
+print("""To mimic the fact that less educated people more often than highly educated people
+do physical work, we augment the model by adding a risk of injury while working.
+In this case, human capital depreciates at a faster rate, but the worker is compensated
+fully, i.e. receives the same salary as if they had still been working. Note that once the
+worker returns to the labour market, they are again compensated relative to their level
+of human capital.""")
 print("")
 print("We set delta_injury = 0.1")
 print("We set change of recovery 0.95")
