@@ -1,0 +1,612 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+print("EXERCISE 2")
+print("")
+
+print("#### 2.1 ####")
+
+# -- given parameter values --
+
+N = 50_000  # number of individuals
+
+age_start = 18   # Starting age
+age_retire = 65  # retirement age
+
+# Education: short, medium, long
+educations = ['short', 'medium', 'long']
+p_e = np.array([0.40, 0.35, 0.25])
+S_e = np.array([1, 3, 5])
+h_e0 = np.array([1.00, 1.20, 1.55])
+delta_e = np.array([0.010, 0.020, 0.030])
+
+# human capital parameters
+delta = 0.06
+sigma_psi = 0.10
+
+# job-finding parameters
+lam = 0.60   # job-finding probability
+sigma = 0.05  # job-separation probability
+
+# income parameters
+y_SU = 0.45    # under education
+rho = 0.6     # replacement rate while unemployed
+y_floor = 0.35  # floor for those never employed
+
+# Random number generator (single stream reused throughout)
+rng = np.random.default_rng(2026)
+
+n_years = age_retire - age_start  # 47 years, ages 18-64
+
+# Human capital shocks: one fresh draw per individual per period
+print("All global variables and shocks are defined")
+
+print("")
+psi = rng.lognormal(-0.5 * sigma_psi**2, sigma_psi, size=(N, n_years))
+print(f"mean value of psi is validated: {round(psi[1,:].mean(), 2):.4f}")
+
+print("")
+print("#### 2.2 ####")
+print("")
+print("# 2.2.1")
+
+# Draw each individual's education and corresponding years of schooling
+education_level_i = rng.choice(3, size=N, p=p_e)  # 0=short, 1=medium, 2=long
+S_e_i = S_e[education_level_i]                     # each individual's own years of education
+
+# Check education shares against p_e
+short_count = 0
+medium_count = 0
+long_count = 0
+
+for i in range(N):
+    if education_level_i[i] == 0:
+        short_count = short_count + 1
+    elif education_level_i[i] == 1:
+        medium_count = medium_count + 1
+    else:
+        long_count = long_count + 1
+
+print("Comparing education shares to target p_e:")
+print(f"Share short:  {short_count / N:.4f} (target {p_e[0]})")
+print(f"Share medium: {medium_count / N:.4f} (target {p_e[1]})")
+print(f"Share long:   {long_count / N:.4f} (target {p_e[2]})")
+
+
+uniforms = rng.uniform(0.0, 1.0, size=(N, n_years))
+
+def simulate_employment(S_e_i, uniforms):
+    employed = np.empty((N, n_years))
+    for i in range(N):
+        for t in range(n_years):
+            if t < S_e_i[i]:
+                # still in education: not employed
+                employed[i, t] = 0
+            elif t == S_e_i[i]:
+                # just finished education: enters labor market as unemployed
+                employed[i, t] = 0
+            else:
+                # already in the labor market
+                if employed[i, t - 1] == 0:
+                    # was unemployed -> finds a job with probability lambda
+                    if uniforms[i, t] < lam:
+                        employed[i, t] = 1
+                    else:
+                        employed[i, t] = 0
+                else:
+                    # was employed -> loses job with probability sigma
+                    if uniforms[i, t] < sigma:
+                        employed[i, t] = 0
+                    else:
+                        employed[i, t] = 1
+
+    return employed #50000x47 matrix with 1=employed 0=unemployed
+
+
+employed = simulate_employment(S_e_i, uniforms)
+employed.shape
+
+# Validation step
+print("\nComparing unemployment rate to theoretical:")
+
+t_values = [1, 5, 8, 10, 20, 30, 40, n_years - 1]
+
+theoretical_unemployment = sigma / (sigma + lam)
+
+for t in t_values:
+    labor_force_count = 0
+    unemployed_count = 0
+
+    for i in range(N):
+        if t >= S_e_i[i]:
+            # this person has finished school and is in the labor market
+            labor_force_count = labor_force_count + 1
+            if employed[i, t] == 0:
+                unemployed_count = unemployed_count + 1
+
+    unemployment_rate = unemployed_count / labor_force_count
+    print(f"t = {t} (age {age_start + t}): unemployment rate = {unemployment_rate:.4f}")
+
+print(f"\nTheoretical steady-state unemployment rate: sigma/(sigma+lam) = {theoretical_unemployment:.4f}")
+
+
+# Income calculation
+income = np.empty((N, n_years))
+human_capital = np.empty((N, n_years))
+
+last_job_income = np.empty(N)            # income earned in the most recent job
+ever_employed = np.zeros(N, dtype=bool)  # has this person held a job yet?
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i[i]:
+            # still in education: receives the student grant
+            income[i, t] = y_SU
+            human_capital[i, t] = 0
+
+        else:
+            # in the labor market: first update human capital for this period
+            if t == S_e_i[i]:
+                # first period after finishing school: starts at the education-specific level
+                human_capital[i, t] = h_e0[education_level_i[i]]
+            elif employed[i, t] == 1:
+                # employed: human capital grows at the education-specific rate, times the shock
+                human_capital[i, t] = human_capital[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi[i, t]
+            else:
+                # unemployed: human capital depreciates, times the shock
+                human_capital[i, t] = human_capital[i, t - 1] * (1 - delta) * psi[i, t]
+
+            # then set income based on employment status
+            if employed[i, t] == 1:
+                income[i, t] = human_capital[i, t]
+                last_job_income[i] = income[i, t]
+                ever_employed[i] = True
+            else:
+                if ever_employed[i]:
+                    # unemployed with a previous job: replacement rate of that job's income
+                    income[i, t] = rho * last_job_income[i]
+                else:
+                    # unemployed and never had a job: use the floor
+                    income[i, t] = y_floor
+
+income.shape
+
+print("")
+print("# 2.2.2")
+print("")
+
+print("Plotted mean income and four different deciles over the period")
+ages = np.arange(age_start, age_retire)
+
+mean_income = income.mean(axis=0)
+
+p10 = np.percentile(income, 10, axis=0)
+p35 = np.percentile(income, 35, axis=0)
+p80 = np.percentile(income, 80, axis=0)
+p90 = np.percentile(income, 90, axis=0)
+
+plt.figure(figsize=(10, 6))
+plt.plot(ages, mean_income, label='Mean', color='black', linewidth=2)
+plt.plot(ages, p10, label='10th percentile', linestyle='--')
+plt.plot(ages, p35, label='35th percentile', linestyle='--')
+plt.plot(ages, p80, label='80th percentile', linestyle='--')
+plt.plot(ages, p90, label='90th percentile', linestyle='--')
+
+plt.xlabel('Age')
+plt.ylabel('Income')
+plt.title('Income over the life cycle: mean and selected quantiles')
+plt.legend()
+plt.show()
+
+print("# 2.2.3")
+print("")
+print("Histogram of the income distribution at ages 25, 35, 45, 60")
+ages_to_plot = [25, 35, 45, 60]
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+axes = axes.flatten()
+
+for idx, age in enumerate(ages_to_plot):
+    t = age - age_start  # convert age to the corresponding period index
+    axes[idx].hist(income[:, t], bins=50)
+    axes[idx].axvline(income[:, t].mean(), color='red', label='Mean')
+    axes[idx].set_title(f'Income distribution at age {age}')
+    axes[idx].set_xlabel('Income')
+    axes[idx].set_ylabel('Count')
+    axes[idx].legend()
+
+plt.tight_layout()
+plt.show()
+
+print("The plot shows that as time passes, the histograms shrink in size.")
+print("This likely happens because the three groups each converge against individual income levels.")
+print("However, while the histograms shrink in size, the relative difference between incomes")
+print("i.e the level of inequality seems to increase")
+
+print("")
+print("#### 2.3 ####")
+print("")
+
+# Gini coefficient: 2 * the area between the 45-degree line (perfect equality)
+# and the cumulated income share (the Lorenz curve)
+def gini_coefficient(y):
+    sorted_y = np.sort(y)
+    n = len(sorted_y)
+
+    cumulative_income_share = np.cumsum(sorted_y) / np.sum(sorted_y)  # cumulated % of total income
+    population_share = np.arange(1, n + 1) / n                        # cumulated % of population (the 45-degree line)
+
+    gini = 2 * np.sum(population_share - cumulative_income_share) / n
+
+    return gini
+
+
+# Gini coefficient for the full simulated sample (all individuals, all ages pooled)
+gini_full_sample = gini_coefficient(income.flatten())
+print(f"Gini coefficient (FULL SAMPLE, all ages pooled): {gini_full_sample:.4f}")
+
+# Test the Gini function on a uniform distribution: the true value is exactly 1/3
+uniform_sample = rng.uniform(0, 1, 100_000)
+gini_uniform = gini_coefficient(uniform_sample)
+print(f"Gini coefficient (UNIFORM TEST): {gini_uniform:.4f} (theoretical: {1/3:.4f})")
+
+# Standard normal CDF, approximated by simulation
+def standard_normal_cdf(z, n_draws=1_000_000):
+    draws = rng.standard_normal(n_draws)
+    return (draws <= z).mean() 
+#.mean counts the fraction of draws less than or equal to the mean
+
+# Test the Gini function on a lognormal distribution with s=2:
+s = 2
+lognormal_sample = rng.lognormal(0, s, size=100_000)
+gini_lognormal = gini_coefficient(lognormal_sample)
+theoretical_lognormal = 2 * standard_normal_cdf(z = s / np.sqrt(2)) - 1
+print(f"Gini coefficient (LOGNORMAL TEST, s={s}): {gini_lognormal:.4f} (theoretical: {theoretical_lognormal:.4f})")
+
+
+# Lorenz curve for the full sample (all individuals, all ages pooled)
+sorted_income = np.sort(income.flatten())
+n = len(sorted_income)
+
+cumulative_income_share = np.cumsum(sorted_income) / np.sum(sorted_income)
+population_share = np.arange(1, n + 1) / n
+
+print("")
+print("Plotted Lorenz curve:")
+
+plt.figure(figsize=(8, 8))
+plt.plot(population_share, cumulative_income_share, label='Lorenz curve')
+plt.plot([0, 1], [0, 1], label='45-degree line (perfect equality)', linestyle='--', color='black')
+
+plt.xlabel('Cumulative share of population')
+plt.ylabel('Cumulative share of income')
+plt.title('Lorenz curve: full sample')
+plt.legend()
+plt.show()
+
+# Gini coefficient for every single age (18 to 64)
+gini_by_age_baseline = np.empty(n_years)
+
+for t in range(n_years):
+    gini_by_age_baseline[t] = gini_coefficient(income[:, t])
+
+print("Plotted gini coefficient across all age groups:")
+
+plt.figure(figsize=(10, 6))
+plt.plot(ages, gini_by_age_baseline)
+plt.xlabel('Age')
+plt.ylabel('Gini coefficient')
+plt.title('Gini coefficient over the life cycle')
+plt.show()
+
+print("The graph shows that inequality increases with age due to a differences in human capital ")
+print("accumulation. Thus, for some age groups the gini-coefficient is larger and for some smaller ")
+print("than for the entire population")
+
+print("")
+print("#### 2.4 ####")
+print("")
+
+print("Scenario: no educational differences.")
+# Everyone gets the same (population-weighted average) years of schooling,
+# initial human capital, and human capital growth rate, instead of these
+# varying by education level.
+S_e_avg = round(np.dot(p_e, S_e))
+h_e0_avg = np.dot(p_e, h_e0)
+delta_e_avg = np.dot(p_e, delta_e)
+
+S_e_i_no_education = np.full(N, S_e_avg)
+
+# reuse the baseline uniforms so only the education inputs change, not the luck
+employed_no_education = simulate_employment(S_e_i_no_education, uniforms)
+
+income_no_education = np.empty((N, n_years))
+human_capital_no_education = np.empty((N, n_years))
+
+last_job_income_no_education = np.empty(N)
+ever_employed_no_education = np.zeros(N, dtype=bool)
+
+# Income for each year in the "no education" scenario.
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i_no_education[i]:
+            income_no_education[i, t] = y_SU
+            human_capital_no_education[i, t] = 0
+
+        else:
+            if t == S_e_i_no_education[i]:
+                human_capital_no_education[i, t] = h_e0_avg
+            elif employed_no_education[i, t] == 1:
+                human_capital_no_education[i, t] = human_capital_no_education[i, t - 1] * (1 + delta_e_avg) * psi[i, t]
+            else:
+                human_capital_no_education[i, t] = human_capital_no_education[i, t - 1] * (1 - delta) * psi[i, t]
+
+            if employed_no_education[i, t] == 1:
+                income_no_education[i, t] = human_capital_no_education[i, t]
+                last_job_income_no_education[i] = income_no_education[i, t]
+                ever_employed_no_education[i] = True
+            else:
+                if ever_employed_no_education[i]:
+                    income_no_education[i, t] = rho * last_job_income_no_education[i]
+                else:
+                    income_no_education[i, t] = y_floor
+
+gini_full_no_education = gini_coefficient(income_no_education.flatten())
+gini_by_age_no_education = np.empty(n_years)
+for t in range(n_years):
+    gini_by_age_no_education[t] = gini_coefficient(income_no_education[:, t])
+
+print(f"Gini coefficient (no educational differences, full sample): {gini_full_no_education:.4f}")
+
+print("")
+print("Scenario: no shocks to human capital.")
+# Employment is unaffected by human capital, so the baseline `employed` array is reused.
+psi_no_shocks = np.ones((N, n_years))
+
+income_no_shocks = np.empty((N, n_years))
+human_capital_no_shocks = np.empty((N, n_years))
+
+last_job_income_no_shocks = np.empty(N)
+ever_employed_no_shocks = np.zeros(N, dtype=bool)
+
+# Income for each year in the "no shocks" scenario. 
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i[i]:
+            income_no_shocks[i, t] = y_SU
+            human_capital_no_shocks[i, t] = 0
+
+        else:
+            if t == S_e_i[i]:
+                human_capital_no_shocks[i, t] = h_e0[education_level_i[i]]
+            elif employed[i, t] == 1:
+                human_capital_no_shocks[i, t] = human_capital_no_shocks[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi_no_shocks[i, t]
+            else:
+                human_capital_no_shocks[i, t] = human_capital_no_shocks[i, t - 1] * (1 - delta) * psi_no_shocks[i, t]
+
+            if employed[i, t] == 1:
+                income_no_shocks[i, t] = human_capital_no_shocks[i, t]
+                last_job_income_no_shocks[i] = income_no_shocks[i, t]
+                ever_employed_no_shocks[i] = True
+            else:
+                if ever_employed_no_shocks[i]:
+                    income_no_shocks[i, t] = rho * last_job_income_no_shocks[i]
+                else:
+                    income_no_shocks[i, t] = y_floor
+
+gini_full_no_shocks = gini_coefficient(income_no_shocks.flatten())
+gini_by_age_no_shocks = np.empty(n_years)
+for t in range(n_years):
+    gini_by_age_no_shocks[t] = gini_coefficient(income_no_shocks[:, t])
+
+print(f"Gini coefficient (no human capital shocks, full sample): {gini_full_no_shocks:.4f}")
+
+print("")
+print("Scenario: no depreciation of human capital while unemployed.")
+# Employment is unaffected, so the baseline `employed` array is reused.
+delta_no_depreciation = 0.0
+
+income_no_depreciation = np.empty((N, n_years))
+human_capital_no_depreciation = np.empty((N, n_years))
+
+last_job_income_no_depreciation = np.empty(N)
+ever_employed_no_depreciation = np.zeros(N, dtype=bool)
+
+# Income for each year in the "no depreciation" scenario.
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i[i]:
+            income_no_depreciation[i, t] = y_SU
+            human_capital_no_depreciation[i, t] = 0
+
+        else:
+            if t == S_e_i[i]:
+                human_capital_no_depreciation[i, t] = h_e0[education_level_i[i]]
+            elif employed[i, t] == 1:
+                human_capital_no_depreciation[i, t] = human_capital_no_depreciation[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi[i, t]
+            else:
+                human_capital_no_depreciation[i, t] = human_capital_no_depreciation[i, t - 1] * (1 - delta_no_depreciation) * psi[i, t]
+
+            if employed[i, t] == 1:
+                income_no_depreciation[i, t] = human_capital_no_depreciation[i, t]
+                last_job_income_no_depreciation[i] = income_no_depreciation[i, t]
+                ever_employed_no_depreciation[i] = True
+            else:
+                if ever_employed_no_depreciation[i]:
+                    income_no_depreciation[i, t] = rho * last_job_income_no_depreciation[i]
+                else:
+                    income_no_depreciation[i, t] = y_floor
+
+gini_full_no_depreciation = gini_coefficient(income_no_depreciation.flatten())
+gini_by_age_no_depreciation = np.empty(n_years)
+for t in range(n_years):
+    gini_by_age_no_depreciation[t] = gini_coefficient(income_no_depreciation[:, t])
+
+print(f"Gini coefficient (no depreciation while unemployed, full sample): {gini_full_no_depreciation:.4f}")
+
+print("")
+print("Scenario: no unemployment. Everyone is employed in every period once they finish school")
+
+employed_no_unemployment = np.empty((N, n_years))
+
+for i in range(N):
+    for t in range(n_years):
+        if t < S_e_i[i]:
+            employed_no_unemployment[i, t] = 0
+        else:
+            employed_no_unemployment[i, t] = 1
+
+income_no_unemployment = np.empty((N, n_years))
+human_capital_no_unemployment = np.empty((N, n_years))
+
+# Income for each year in the "no unemployment" scenario.
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i[i]:
+            income_no_unemployment[i, t] = y_SU
+            human_capital_no_unemployment[i, t] = 0
+
+        else:
+            if t == S_e_i[i]:
+                human_capital_no_unemployment[i, t] = h_e0[education_level_i[i]]
+            else:
+                # always employed, so human capital always grows; reuse baseline psi
+                human_capital_no_unemployment[i, t] = human_capital_no_unemployment[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi[i, t]
+
+            income_no_unemployment[i, t] = human_capital_no_unemployment[i, t]
+
+gini_full_no_unemployment = gini_coefficient(income_no_unemployment.flatten())
+gini_by_age_no_unemployment = np.empty(n_years)
+for t in range(n_years):
+    gini_by_age_no_unemployment[t] = gini_coefficient(income_no_unemployment[:, t])
+
+print(f"Gini coefficient (no unemployment, full sample): {gini_full_no_unemployment:.4f}")
+
+print("")
+print("Combined plot: age-specific Gini coefficient, baseline vs. all 4 switched-off scenarios")
+plt.figure(figsize=(10, 6))
+plt.plot(ages, gini_by_age_baseline, label='Baseline', color='black', linewidth=2)
+plt.plot(ages, gini_by_age_no_education, label='No educational differences')
+plt.plot(ages, gini_by_age_no_shocks, label='No human capital shocks')
+plt.plot(ages, gini_by_age_no_depreciation, label='No depreciation while unemployed')
+plt.plot(ages, gini_by_age_no_unemployment, label='No unemployment')
+
+plt.xlabel('Age')
+plt.ylabel('Gini coefficient')
+plt.title('Gini coefficient over the life cycle: baseline vs. switched-off mechanisms')
+plt.legend()
+plt.show()
+
+print("")
+print("In the case of no deprectiation of human capital while unemployed, the results")
+print("show that the gini-coefficient across the entire population increases, while it is")
+print("lower or equal to the base case across every age group. This is likely caused by")
+print("the increased difference between younger and older generations caused by the lack of")
+print("depreciation, thus meaning that older generations now simply accumulate more ")
+print("human capital on average.")
+print("")
+
+print("#### 2.5 ####")
+print("")
+print("To mimic that lesser educated people, more often than highly educated people, ")
+print("do physical work, we augment the model by adding a risk of injury while working. ")
+print("In this case, human capital will depreciate at a faster rate, however, the worker ")
+print("gets compensated fully, i.e. gets the same salary as if he/she had been still working.")
+print("Note that once the worker returns to the job market, they will once again be compensated ")
+print("relative to their level of human capital.")
+print("")
+print("We set delta_injury = 0.1")
+print("We set change of recovery 0.95")
+print("Risk of injury is set to [0.05, 0.02, 0.01] with 0.05 = p injury_low")
+print("")
+
+p_injury_e = np.array([0.05, 0.02, 0.01])  # probability of injury while employed, by education (short, medium, long)
+p_recovery = 0.95                        # probability of recovering from injury each period
+delta_injury = 0.1                       # human capital depreciation rate while injured
+
+# Status codes: 0 = unemployed, 1 = employed, 2 = injured
+status = np.empty((N, n_years))
+human_capital_injury = np.empty((N, n_years))
+income_injury = np.empty((N, n_years))
+
+last_job_income_injury = np.empty(N)
+ever_employed_injury = np.zeros(N, dtype=bool)
+
+uniforms_injury = rng.uniform(0.0, 1.0, size=(N, n_years))
+
+for i in range(N):
+    for t in range(n_years):
+
+        if t < S_e_i[i]:
+            # still in education
+            income_injury[i, t] = y_SU
+            human_capital_injury[i, t] = 0
+
+        else:
+            # determine this period's status
+            if t == S_e_i[i]:
+                # just finished education: enters labor market as unemployed
+                status[i, t] = 0
+            else:
+                prev_status = status[i, t - 1]
+                draw = uniforms_injury[i, t]
+
+                if prev_status == 1:
+                    # was employed: could become injured, lose the job, or stay employed
+                    p_inj = p_injury_e[education_level_i[i]]
+                    if draw < p_inj:
+                        status[i, t] = 2  # injured
+                    elif draw < p_inj + sigma:
+                        status[i, t] = 0  # unemployed
+                    else:
+                        status[i, t] = 1  # stays employed
+                elif prev_status == 2:
+                    # was injured: recovers with probability p_recovery
+                    status[i, t] = 1 if draw < p_recovery else 2
+                else:
+                    # was unemployed: finds a job with probability lambda
+                    status[i, t] = 1 if draw < lam else 0
+
+            # human capital: special starting value on entry, otherwise evolves from last period
+            if t == S_e_i[i]:
+                human_capital_injury[i, t] = h_e0[education_level_i[i]]
+            elif status[i, t] == 1:
+                human_capital_injury[i, t] = human_capital_injury[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi[i, t]
+            elif status[i, t] == 2:
+                # injured: human capital depreciates faster than while unemployed
+                human_capital_injury[i, t] = human_capital_injury[i, t - 1] * (1 - delta_injury) * psi[i, t]
+            else:
+                human_capital_injury[i, t] = human_capital_injury[i, t - 1] * (1 - delta) * psi[i, t]
+
+            # income depends on this period's status
+            if status[i, t] == 1:
+                income_injury[i, t] = human_capital_injury[i, t]
+                last_job_income_injury[i] = income_injury[i, t]
+                ever_employed_injury[i] = True
+            elif status[i, t] == 2:
+                # injured: fully compensated at the salary from just before the injury
+                income_injury[i, t] = last_job_income_injury[i]
+            else:
+                if ever_employed_injury[i]:
+                    income_injury[i, t] = rho * last_job_income_injury[i]
+                else:
+                    income_injury[i, t] = y_floor
+
+gini_full_injury = gini_coefficient(income_injury.flatten())
+gini_by_age_injury = np.empty(n_years)
+for t in range(n_years):
+    gini_by_age_injury[t] = gini_coefficient(income_injury[:, t])
+
+print(f"Gini coefficient (injury risk extension, full sample): {gini_full_injury:.4f}")
+print("")
+print("Thus, we find that this addition increases inequality, however only slighty")
