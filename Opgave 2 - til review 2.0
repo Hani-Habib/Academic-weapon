@@ -101,7 +101,7 @@ def simulate_employment(S_e_i, uniforms):
                     else:
                         employed[i, t] = 1
 
-    return employed #50000x47 matrix with 1=employed 0=unemployed
+    return employed
 
 
 employed = simulate_employment(S_e_i, uniforms)
@@ -267,7 +267,7 @@ theoretical_lognormal = 2 * standard_normal_cdf(z = s / np.sqrt(2)) - 1
 print(f"Gini coefficient (LOGNORMAL TEST, s={s}): {gini_lognormal:.4f} (theoretical: {theoretical_lognormal:.4f})")
 
 
-# Lorenz curve for the full sample (all individuals, all ages pooled)
+# Lorenz curve for the full sample
 sorted_income = np.sort(income.flatten())
 n = len(sorted_income)
 
@@ -287,7 +287,7 @@ plt.title('Lorenz curve: full sample')
 plt.legend()
 plt.show()
 
-# Gini coefficient for every single age (18 to 64)
+# Gini coefficient for every single age
 gini_by_age_baseline = np.empty(n_years)
 
 for t in range(n_years):
@@ -320,7 +320,6 @@ delta_e_avg = np.dot(p_e, delta_e)
 
 S_e_i_no_education = np.full(N, S_e_avg)
 
-# reuse the baseline uniforms so only the education inputs change, not the luck
 employed_no_education = simulate_employment(S_e_i_no_education, uniforms)
 
 income_no_education = np.empty((N, n_years))
@@ -329,7 +328,7 @@ human_capital_no_education = np.empty((N, n_years))
 last_job_income_no_education = np.empty(N)
 ever_employed_no_education = np.zeros(N, dtype=bool)
 
-# Income for each year in the "no education" scenario.
+# Income for each year in the "no education" scenario
 
 for i in range(N):
     for t in range(n_years):
@@ -374,8 +373,6 @@ human_capital_no_shocks = np.empty((N, n_years))
 last_job_income_no_shocks = np.empty(N)
 ever_employed_no_shocks = np.zeros(N, dtype=bool)
 
-# Income for each year in the "no shocks" scenario. 
-
 for i in range(N):
     for t in range(n_years):
 
@@ -410,7 +407,6 @@ print(f"Gini coefficient (no human capital shocks, full sample): {gini_full_no_s
 
 print("")
 print("Scenario: no depreciation of human capital while unemployed.")
-# Employment is unaffected, so the baseline `employed` array is reused.
 delta_no_depreciation = 0.0
 
 income_no_depreciation = np.empty((N, n_years))
@@ -419,7 +415,6 @@ human_capital_no_depreciation = np.empty((N, n_years))
 last_job_income_no_depreciation = np.empty(N)
 ever_employed_no_depreciation = np.zeros(N, dtype=bool)
 
-# Income for each year in the "no depreciation" scenario.
 
 for i in range(N):
     for t in range(n_years):
@@ -468,7 +463,6 @@ for i in range(N):
 income_no_unemployment = np.empty((N, n_years))
 human_capital_no_unemployment = np.empty((N, n_years))
 
-# Income for each year in the "no unemployment" scenario.
 
 for i in range(N):
     for t in range(n_years):
@@ -481,7 +475,6 @@ for i in range(N):
             if t == S_e_i[i]:
                 human_capital_no_unemployment[i, t] = h_e0[education_level_i[i]]
             else:
-                # always employed, so human capital always grows; reuse baseline psi
                 human_capital_no_unemployment[i, t] = human_capital_no_unemployment[i, t - 1] * (1 + delta_e[education_level_i[i]]) * psi[i, t]
 
             income_no_unemployment[i, t] = human_capital_no_unemployment[i, t]
@@ -534,7 +527,7 @@ p_injury_e = np.array([0.05, 0.02, 0.01])  # probability of injury while employe
 p_recovery = 0.95                        # probability of recovering from injury each period
 delta_injury = 0.1                       # human capital depreciation rate while injured
 
-# Status codes: 0 = unemployed, 1 = employed, 2 = injured
+
 status = np.empty((N, n_years))
 human_capital_injury = np.empty((N, n_years))
 income_injury = np.empty((N, n_years))
@@ -553,7 +546,7 @@ for i in range(N):
             human_capital_injury[i, t] = 0
 
         else:
-            # determine this period's status
+            # Status:
             if t == S_e_i[i]:
                 # just finished education: enters labor market as unemployed
                 status[i, t] = 0
@@ -577,7 +570,7 @@ for i in range(N):
                     # was unemployed: finds a job with probability lambda
                     status[i, t] = 1 if draw < lam else 0
 
-            # human capital: special starting value on entry, otherwise evolves from last period
+            # human capital:
             if t == S_e_i[i]:
                 human_capital_injury[i, t] = h_e0[education_level_i[i]]
             elif status[i, t] == 1:
@@ -588,7 +581,7 @@ for i in range(N):
             else:
                 human_capital_injury[i, t] = human_capital_injury[i, t - 1] * (1 - delta) * psi[i, t]
 
-            # income depends on this period's status
+            # income:
             if status[i, t] == 1:
                 income_injury[i, t] = human_capital_injury[i, t]
                 last_job_income_injury[i] = income_injury[i, t]
