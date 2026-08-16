@@ -34,12 +34,12 @@ y_SU = 0.45    # under education
 rho = 0.6     # replacement rate while unemployed
 y_floor = 0.35  # floor for those never employed
 
-# Random number generator (single stream reused throughout)
+# Random number generator
 rng = np.random.default_rng(2026)
 
 n_years = age_retire - age_start  # 47 years, ages 18-64
 
-# Human capital shocks: one fresh draw per individual per period
+# Human capital shocks
 print("All global variables and shocks are defined")
 
 print("")
