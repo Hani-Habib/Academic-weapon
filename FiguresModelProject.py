@@ -3,23 +3,23 @@ import matplotlib.pyplot as plt
 
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
-def plot_grid(opt,title=''):
-    """ utility over the nested shares, as a surface and as a contour plot
+def plot_grid(opt_grid,title=''):
+    """ utility over the budget shares, as a 3D and as a contour plot
 
     Args:
 
-        opt (SimpleNamespace): a solution from ConsumerClass.solve_grid()
-        title (str): name of the calibration, put in the panel titles
+        opt_grid (SimpleNamespace): optimal budget shares and utility
+        title (str): name of the calibration
 
     """
 
     fig = plt.figure(figsize=(14,5.5))
 
-    # the surface
+    # 3D plot
     ax = fig.add_subplot(1,2,1,projection='3d')
 
-    ax.plot_surface(opt.s1_grid,opt.w_grid,opt.u_grid,cmap='viridis')
-    ax.plot([opt.s1],[opt.w],[opt.u],'o',ms=9,color=colors[3],label='grid search')
+    ax.plot_surface(opt_grid.s1_grid,opt_grid.w_grid,opt_grid.u_grid,cmap='viridis')
+    ax.plot([opt_grid.s1],[opt_grid.w],[opt_grid.u],'o',ms=9,color=colors[3],label='grid search optimum')
 
     ax.set_title(f'Utility({title})')
     ax.set_xlabel('$s_1$')
@@ -27,12 +27,12 @@ def plot_grid(opt,title=''):
     ax.set_zlabel('utility, $u$')
     ax.legend(loc='upper left',fontsize=11)
 
-    # the contour plot
+    # contour plot
     ax = fig.add_subplot(1,2,2)
 
-    cs = ax.contourf(opt.s1_grid,opt.w_grid,opt.u_grid,levels=30)
+    cs = ax.contourf(opt_grid.s1_grid,opt_grid.w_grid,opt_grid.u_grid,levels=30)
     fig.colorbar(cs,ax=ax,label='utility, $u$')
-    ax.plot(opt.s1,opt.w,'o',ms=9,color=colors[3],label='grid search')
+    ax.plot(opt_grid.s1,opt_grid.w,'o',ms=9,color=colors[3],label='grid search optimum')
 
     ax.set_title(f'Contours ({title})')
     ax.set_xlabel('$s_1$')
@@ -59,7 +59,7 @@ def plot_convergencepath(opt_grid,opt,title=''):
 
     fig = plt.figure(figsize=(14,5.5))
 
-    # a. the path on top of the contours
+    # the path on top of the contours
     ax = fig.add_subplot(1,2,1)
 
     cs = ax.contourf(opt_grid.s1_grid,opt_grid.w_grid,opt_grid.u_grid,levels=30)
@@ -77,7 +77,7 @@ def plot_convergencepath(opt_grid,opt,title=''):
     ax.legend(loc='upper right',fontsize=11)
     ax.grid(visible=False)
 
-    # b. distance to the end point
+    # distance to the end point
     ax = fig.add_subplot(1,2,2)
 
     dist = np.sqrt(np.sum((opt.path-opt.path[-1])**2,axis=1))
