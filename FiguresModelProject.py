@@ -91,3 +91,62 @@ def plot_convergencepath(opt_grid,opt,title=''):
 
     fig.tight_layout()
     plt.show()
+
+
+def plot_revenue(tau_vec,R,names,calibrations):
+    """ revenue against the tax rate, one panel per calibration
+
+    Args:
+
+        tau_vec (ndarray): the tax rates
+        R (dict): revenue arrays, keyed by (calibration,instrument)
+        names (list): the instruments to draw, in order
+        calibrations (list): the calibrations, one panel each
+
+    """
+
+    fig,axes = plt.subplots(1,len(calibrations),figsize=(12,4.5),sharey=True)
+
+    for ax,cal in zip(axes,calibrations):
+
+        for j,name in enumerate(names):
+            ax.plot(tau_vec,R[cal,name],color=f'C{j}',label=name)
+
+        ax.set_xlabel(r'tax rate, $\tau$')
+        ax.set_title(cal)
+        ax.grid(True)
+
+    axes[0].set_ylabel('revenue, $R$')
+    axes[0].legend(fontsize=8)
+
+    fig.tight_layout()
+
+
+def plot_utility_revenue(R,u,names,calibrations):
+    """ utility against the revenue raised, one panel per calibration
+
+    Args:
+
+        R (dict): revenue arrays, keyed by (calibration,instrument)
+        u (dict): utility arrays, same keys
+        names (list): the instruments to draw, in order
+        calibrations (list): the calibrations, one panel each
+
+    """
+
+    fig,axes = plt.subplots(1,len(calibrations),figsize=(12,4.5),sharey=True)
+
+    for ax,cal in zip(axes,calibrations):
+
+        for j,name in enumerate(names):
+            ls = '--' if name == 'Lump-sum' else '-' # the benchmark
+            ax.plot(R[cal,name],u[cal,name],color=f'C{j}',ls=ls,label=name)
+
+        ax.set_xlabel('revenue, $R$')
+        ax.set_title(cal)
+        ax.grid(True)
+
+    axes[0].set_ylabel('utility, $u$')
+    axes[0].legend(fontsize=8)
+
+    fig.tight_layout()
