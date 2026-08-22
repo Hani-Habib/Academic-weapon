@@ -105,6 +105,22 @@ class GovernmentClass(ConsumerClass):
     #########################################
 
     def tax_revenue(self, opt=None):
+        """ total tax revenue given the taxes currently set
+
+        Note that revenue is collected at the prices the *seller* receives, so
+        the tax paid on good j is tau_j*p_j_pre*x_j.
+
+        Args:
+
+            opt (SimpleNamespace): a solution from .solve(). Solved for here if
+                not given -- pass it in when you already have it, to avoid
+                solving the same problem twice
+
+        Returns:
+
+            (float): tax revenue
+
+        """
 
         par = self.par
 
@@ -116,17 +132,26 @@ class GovernmentClass(ConsumerClass):
         x1, x2, x3 = self.quantities(opt.s1, opt.w)
 
         # total tax revenue
-        R = (
-            par.T
-            + par.tau1 * par.p1_pre * x1
-            + par.tau2 * par.p2_pre * x2
-            + par.tau3 * par.p3_pre * x3
-        )
+        R = (par.T + par.tau1 * par.p1_pre * x1
+             + par.tau2 * par.p2_pre * x2
+             + par.tau3 * par.p3_pre * x3)
 
         return R
 
 
     def revenue_and_utility(self, tau, goods=(2,)):
+        """ revenue and utility when the same tax rate is put on each good in goods
+
+        Args:
+
+            tau (float): the common tax rate
+            goods (tuple): which goods to tax, e.g. (2,) or (2,3) or (1,2,3)
+
+        Returns:
+
+            (tuple): (revenue, utility)
+
+        """
 
         # choose which goods are taxed
         tau1 = tau if 1 in goods else 0.0
@@ -134,11 +159,7 @@ class GovernmentClass(ConsumerClass):
         tau3 = tau if 3 in goods else 0.0
 
         # set taxes
-        self.set_taxes(
-            tau1=tau1,
-            tau2=tau2,
-            tau3=tau3
-        )
+        self.set_taxes(tau1=tau1, tau2=tau2, tau3=tau3)
 
         # solve consumer problem
         opt = self.solve(do_print=False)
@@ -151,6 +172,17 @@ class GovernmentClass(ConsumerClass):
 
 
     def revenue_and_utility_lump_sum(self, T):
+        """ the same, for a lump-sum tax of T
+
+        Args:
+
+            T (float): the lump-sum tax
+
+        Returns:
+
+            (tuple): (revenue, utility)
+
+        """
 
         # only lump-sum tax
         self.set_taxes(T=T)
@@ -169,38 +201,74 @@ class GovernmentClass(ConsumerClass):
     # 3. hitting a given revenue requirement #
     ##########################################
 
-def max_revenue(self,goods=(2,),tau_max=10.0,N=1001) -> tuple[Any, Any]:
+    def max_revenue(self,goods=(2,),tau_max=10.0,N=1001) -> tuple[Any, Any]:
 
-    tau_vec = np.linspace(0,tau_max,N)
-    R_vec = np.empty(N)
+        """ the largest revenue this instrument can ever raise
 
-    for i,tau_i in enumerate(tau_vec):
-        R_vec[i] = self.revenue_and_utility(tau_i,goods)[0]
+        A grid over the tax rate is enough, exactly as in section 2.1: compute
+        the revenue in every grid point and keep the best one.
 
-    i = np.argmax(R_vec)
+        If the answer comes back at tau_max, the curve was still rising when the
+        grid ran out -- there is no top in the range searched.
 
-    tau = tau_vec[i]
-    R = R_vec[i]
+        Args:
 
-    return tau,R
+            goods (tuple): which goods to tax
+            tau_max (float): largest tax rate to consider
+            N (int): number of grid points
+
+        Returns:
+
+            (tuple): (the revenue-maximizing rate, the largest revenue)
+
+        """
+
+        tau_vec = np.linspace(0,tau_max,N)
+        R_vec = np.empty(N)
+
+        for i,tau_i in enumerate(tau_vec):
+            R_vec[i] = self.revenue_and_utility(tau_i,goods)[0]
+
+        i = np.argmax(R_vec)
+
+        tau = tau_vec[i]
+        R = R_vec[i]
+
+        return tau,R
 
 
-def find_tax_rate(self,R_target,goods=(2,),bracket=(1e-10,1.0)) -> float:
+    def find_tax_rate(self,R_target,goods=(2,),bracket=(1e-10,1.0)) -> float:
 
-    def f(tau):
-        R = self.revenue_and_utility(tau,goods)[0]
-        return R - R_target
+        """ the tax rate on goods that raises exactly R_target
 
-    try:
-        res = optimize.root_scalar(
-            f,
-            bracket=bracket,
-            method='brentq'
-        )
+        Careful: revenue is not always increasing in the tax rate. There can be
+        two rates that raise the same revenue, and a revenue target above the
+        largest possible revenue cannot be reached at all. In that case there is
+        no sign change in the bracket, and the root-finder will raise a
+        ValueError -- which is the correct answer, not a bug. Catch it and
+        return np.nan.
 
-        tau = res.root
+        Args:
 
-    except ValueError:
-        tau = np.nan
+            R_target (float): the revenue requirement
+            goods (tuple): which goods to tax
+            bracket (tuple): interval of tax rates to search in
 
-    return tau
+        Returns:
+
+            (float): the tax rate, or np.nan if the target cannot be reached
+
+        """
+
+        def f(tau):
+            R = self.revenue_and_utility(tau,goods)[0]
+            return R - R_target
+
+        try:
+            res = optimize.root_scalar(f, bracket=bracket, method='brentq')
+            tau = res.root
+
+        except ValueError:
+            tau = np.nan
+
+        return tau
