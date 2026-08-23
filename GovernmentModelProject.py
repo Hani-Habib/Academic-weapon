@@ -1,5 +1,4 @@
 from types import SimpleNamespace
-from typing import Any
 
 import numpy as np
 
@@ -8,7 +7,7 @@ from scipy import optimize
 from ConsumerModelProject import ConsumerClass
 
 class GovernmentClass(ConsumerClass):
-    """ a government raising revenue from the consumer in Consumer.py
+    """ a government raising revenue from the consumer in ConsumerModelProject.py
 
     Two kinds of instrument:
 
@@ -104,7 +103,7 @@ class GovernmentClass(ConsumerClass):
     # 2. revenue, and what the consumer gets #
     #########################################
 
-    def tax_revenue(self, opt=None):
+    def tax_revenue(self,opt=None):
         """ total tax revenue given the taxes currently set
 
         Note that revenue is collected at the prices the *seller* receives, so
@@ -124,14 +123,14 @@ class GovernmentClass(ConsumerClass):
 
         par = self.par
 
-        # solve consumer problem if needed
+        # a. solve consumer problem if needed
         if opt is None:
             opt = self.solve(do_print=False)
 
         # quantities bought
-        x1, x2, x3 = self.quantities(opt.s1, opt.w)
+        x1, x2, x3 = self.quantities(opt.s1,opt.w)
 
-        # total tax revenue
+        # c. total tax revenue
         R = (par.T + par.tau1 * par.p1_pre * x1
              + par.tau2 * par.p2_pre * x2
              + par.tau3 * par.p3_pre * x3)
@@ -139,7 +138,7 @@ class GovernmentClass(ConsumerClass):
         return R
 
 
-    def revenue_and_utility(self, tau, goods=(2,)):
+    def revenue_and_utility(self,tau,goods=(2,)):
         """ revenue and utility when the same tax rate is put on each good in goods
 
         Args:
@@ -153,25 +152,25 @@ class GovernmentClass(ConsumerClass):
 
         """
 
-        # choose which goods are taxed
+        # a. choose which goods are taxed
         tau1 = tau if 1 in goods else 0.0
         tau2 = tau if 2 in goods else 0.0
         tau3 = tau if 3 in goods else 0.0
 
-        # set taxes
-        self.set_taxes(tau1=tau1, tau2=tau2, tau3=tau3)
+        # b. set taxes
+        self.set_taxes(tau1=tau1,tau2=tau2,tau3=tau3)
 
-        # solve consumer problem
+        # c. solve consumer problem
         opt = self.solve(do_print=False)
 
-        # revenue and utility
+        # d. revenue and utility
         R = self.tax_revenue(opt)
         u = opt.u
 
         return R, u
 
 
-    def revenue_and_utility_lump_sum(self, T):
+    def revenue_and_utility_lump_sum(self,T):
         """ the same, for a lump-sum tax of T
 
         Args:
@@ -201,7 +200,7 @@ class GovernmentClass(ConsumerClass):
     # 3. hitting a given revenue requirement #
     ##########################################
 
-    def max_revenue(self,goods=(2,),tau_max=10.0,N=1001) -> tuple[Any, Any]:
+    def max_revenue(self,goods=(2,),tau_max=10.0,N=1001):
 
         """ the largest revenue this instrument can ever raise
 
@@ -237,7 +236,7 @@ class GovernmentClass(ConsumerClass):
         return tau,R
 
 
-    def find_tax_rate(self,R_target,goods=(2,),bracket=(1e-10,1.0)) -> float:
+    def find_tax_rate(self,R_target,goods=(2,),bracket=(1e-10,1.0)):
 
         """ the tax rate on goods that raises exactly R_target
 
@@ -265,10 +264,143 @@ class GovernmentClass(ConsumerClass):
             return R - R_target
 
         try:
-            res = optimize.root_scalar(f, bracket=bracket, method='brentq')
+            res = optimize.root_scalar(f,bracket=bracket,method='brentq')
             tau = res.root
 
         except ValueError:
             tau = np.nan
 
         return tau
+
+
+    #################################
+    # 4. a population of consumers  #
+    #################################
+
+    def draw_alphas(self,N=200,mean=0.60,std=0.10,seed=1234):
+        """ draw a preference for food for each of N consumers
+
+        Does this by drawing from a Beta distribution to
+        keep values from between 0 and 1.
+
+        Args:
+
+            N (int): number of consumers
+            mean (float): mean of alpha, in (0,1)
+            std (float): standard deviation of alpha
+            seed (int): seed for the rng
+
+        Returns:
+
+            (ndarray): the N draws of alpha
+
+        """
+
+        # b. the distribution parameters
+        a = mean*(mean*(1-mean)/std**2 - 1)
+        b = (1-mean)*(mean*(1-mean)/std**2 - 1)
+
+        # c. draw
+        rng = np.random.default_rng(seed)
+
+        return rng.beta(a,b,size=N)
+
+    def revenue_and_utility_population(self,alphas,tau,goods=(2,)):
+        """ mean revenue and each consumer's utility, at the tax rate tau
+
+        The same as .revenue_and_utility(), but for a whole population.
+
+        Args:
+
+            alphas (ndarray): the population
+            tau (float): the tax rate
+            goods (tuple): which goods to tax
+
+        Returns:
+
+            (tuple): (mean revenue per consumer, array of utilities)
+
+        """
+
+        par = self.par
+
+        # a. the alpha parameter as given in the assignment
+        alpha_pre = par.alpha
+
+        # b. allocate
+        R = np.zeros(alphas.size)
+        u = np.zeros(alphas.size)
+
+        # c. one consumer at a time
+        for i,alpha in enumerate(alphas):
+            par.alpha = alpha
+            R[i],u[i] = self.revenue_and_utility(tau,goods=goods)
+
+        # d. put alpha to what it was before
+        par.alpha = alpha_pre
+
+        return np.mean(R),u
+
+    def find_tax_rate_population(self,alphas,R_target,goods=(2,),bracket=(1e-10,3.0)):
+        """ the rate on goods that raises R_target per consumer
+
+        Same idea as in exercise 4, but now for the whole population.
+
+        Args:
+
+            alphas (ndarray): the population
+            R_target (float): revenue requirement
+            goods (tuple): which goods to tax
+            bracket (tuple): interval of tax rates to search in
+
+        Returns:
+
+            (float): the tax rate, or np.nan if the target cannot be reached
+
+        """
+
+        # a. excess revenue of the requirement
+        def f(tau):
+            R = self.revenue_and_utility_population(alphas,tau,goods=goods)[0]
+            return R - R_target
+
+        # b. where difference equals 0
+        try:
+            res = optimize.root_scalar(f,bracket=bracket,method='brentq')
+            tau = res.root
+
+        except ValueError:
+            tau = np.nan
+
+        return tau
+
+
+    def welfare_loss(self,alphas,R_target,goods=(2,)):
+        """ the welfare loss of each consumer
+
+        The relative loss of utility between the baseline model and with taxes
+
+        Args:
+
+            alphas (ndarray): the population
+            R_target (float): revenue requirement
+            goods (tuple): which goods to tax
+
+        Returns:
+
+            (tuple): (the tax rate, array of losses as a fraction of utility)
+
+        """
+
+        # a. baseline utility
+        _,u_base = self.revenue_and_utility_population(alphas,0.0,goods=goods)
+
+        # b. the rate that raises the required revenue
+        tau = self.find_tax_rate_population(alphas,R_target,goods=goods)
+        if np.isnan(tau): return tau,np.full(alphas.size,np.nan)
+
+        # c. the utility
+        _,u_tax = self.revenue_and_utility_population(alphas,tau,goods=goods)
+
+        # d. relative loss
+        return tau,1-u_tax/u_base
