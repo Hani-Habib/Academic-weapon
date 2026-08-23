@@ -273,9 +273,9 @@ class GovernmentClass(ConsumerClass):
         return tau
 
 
-    #################################
-    # 4. a population of consumers  #
-    #################################
+    ###########################################
+    # 4. Exercise 5 extension: heterogeneity  #
+    ###########################################
 
     def draw_alphas(self,N=200,mean=0.60,std=0.10,seed=1234):
         """ draw a preference for food for each of N consumers
